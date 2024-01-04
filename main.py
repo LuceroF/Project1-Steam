@@ -15,7 +15,7 @@ app.version = "1.0.0"
 #DATASETS
 steam_games = pd.read_csv('data/steam_games_cleaned.csv')
 user_reviews = pd.read_csv('data/user_reviews_cleaned.csv')
-user_items = pd.read_csv('data/user_items_cleaned.csv')
+user_items = pd.read_parquet('data/user_items_cleaned.parquet')
 genre= steam_games[["item_id","genres","year_of_release"]]
 
 # Función auxiliar para normalizar cadenas de texto
@@ -56,6 +56,8 @@ def UserForGenre(genero: str):
     # Preparar datos
     user_items['user_id'] = user_items['user_id'].astype('string')
     play_time_user = user_items[["item_id", "playtime_forever", "user_id"]]
+    play_time_user['item_id'] = play_time_user['item_id'].astype('float64')
+    genre_playtime = play_time_user.merge(genre, on="item_id")
     combined_genre_user = play_time_user.merge(genre, on="item_id")
 
     # Convertir a string y agrupar
@@ -126,6 +128,7 @@ def MostPlayedYearForGenre(genre: str):
     # Reutilizando la preparación de datos de UserForGenre
     user_items['user_id'] = user_items['user_id'].astype('string')
     play_time_user = user_items[["item_id", "playtime_forever", "user_id"]]
+    play_time_user['item_id'] = play_time_user['item_id'].astype('float64')
     combined_genre_user = play_time_user.merge(genre, on="item_id")
     combined_genre_user = combined_genre_user.astype({'genres': 'string', 'year_of_release': 'string', 'user_id': 'string'})
 
