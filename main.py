@@ -1,340 +1,280 @@
-from fastapi import FastAPI
+#Importamos las librerias
 import pandas as pd
-from fastapi.responses import JSONResponse
+import numpy as np 
+import pyarrow as pa
+import pyarrow.parquet as pq
+from fastapi import FastAPI
+import unicodedata
+app = FastAPI()
 
 #DATA GENERAL DE LA API
 app = FastAPI()
-app.title = "Steam API - ML SteamGameRecommender"
+app.title = "Steam API - ML SteamGame"
 app.version = "1.0.0"
 
-
 #DATASETS
+steam_games = pd.read_csv('data/steam_games_cleaned.csv')
+user_reviews = pd.read_csv('data/user_reviews_cleaned.csv')
+user_items = pd.read_parquet('data/user_items_cleaned.parquet')
+genre= steam_games[["item_id","genres","year_of_release"]]
 
-df_most_played_year = pd.read_csv("./Data_API/df_most_played_year.csv")
-df_maxuser_genre_cleaned = pd.read_csv('./Data_API/df_maxuser_genre_cleaned.csv')
-df_top_positive_games_by_year = pd.read_csv('./Data_API/df_top_positive_games_by_year.csv')
-df_top_negative_games_by_year = pd.read_csv('./Data_API/df_top_negative_games_by_year.csv')
-df_sentiment_counts = pd.read_csv('./Data_API/df_sentiment_counts.csv')
+# Función auxiliar para normalizar cadenas de texto
+def normalize_string(s):
+    return s.lower().strip()
 
-
-# Endpoint 1
-
-# Ruta para obtener el año con más horas jugadas para un género específico
-@app.get("/most_played_genre/{genre}")
-async def PlayTimeGenre(genre):
+@app.get('/UserForGenre/{genero}')
+def UserForGenre(genero: str):
     """
     <font color="blue">
-    <h1><u>PlayTimeGenre</u></h1>
+    <h1><u>UserForGenre</u></h1>
     </font>
 
-    <b>Año con más horas jugadas para el género dado.</b><br>
-    <b>Esta función recibe un género y retorna el año de lanzamiento con más horas jugadas para ese género.</b><br>
+    <b>Explora Quién Domina en tu Género de Juegos Preferido.</b><br>
+    <b>Esta función desvela quién ha dedicado más horas a un género de juego en particular, acompañado de un historial detallado por año.</b><br>
+
+    <em>Parámetros</em><br>
+    ----------
+    genero : <code>str</code>
+    
+        Escribe el género de juego en inglés, como "action", "simulation", "indie", etc.
+
+    <em>Resultado</em><br>
+    -----------
+    Ejemplo:
+    ```python
+        >>> UserForGenre("action")
+    
+    {"Usuario": "player123", "con más horas jugadas para": "Action", "Historial acumulado": [{"Year": "2012", "Hours Played": 320}] }
+    ```
+    CÓMO PROBAR<br>
+                            1. Haz clic en "Try it out".<br>
+                            2. Introduce el género en el campo de texto (ejemplo: action).<br>
+                            3. Pulsa "Execute".<br>
+                            4. Navega hasta "Response body" para ver los detalles del usuario y su historial.
+                            </font>
+    """
+    # Preparar datos
+    user_items['user_id'] = user_items['user_id'].astype('string')
+    play_time_user = user_items[["item_id", "playtime_forever", "user_id"]]
+    play_time_user['item_id'] = play_time_user['item_id'].astype('float64')
+    genre_playtime = play_time_user.merge(genre, on="item_id")
+    combined_genre_user = play_time_user.merge(genre, on="item_id")
+
+    # Convertir a string y agrupar
+    combined_genre_user = combined_genre_user.astype({'genres': 'string', 'year_of_release': 'string', 'user_id': 'string'})
+    total_playtime_by_user_year = combined_genre_user.groupby(["genres", "user_id", "year_of_release"])["playtime_forever"].sum().reset_index()
+    total_hours_by_user = combined_genre_user.groupby(["genres", "user_id"])["playtime_forever"].sum().reset_index()
+    max_hours_by_genre = total_hours_by_user.groupby("genres")["playtime_forever"].agg(playtime_forever="max").reset_index()
+
+    # Combinar y preparar DataFrame
+    detailed_max_hours = pd.merge(max_hours_by_genre, total_hours_by_user, on=["genres", "playtime_forever"])
+    combined_user_playtime = pd.merge(detailed_max_hours, total_playtime_by_user_year.rename(columns={"playtime_forever": "playtime_forever_year"}))
+
+    # Normalización y búsqueda de usuario
+    genero_norm = normalize_string(genero)
+    combined_user_playtime['genres_norm'] = combined_user_playtime['genres'].apply(normalize_string)
+    user_genre_data = combined_user_playtime[combined_user_playtime['genres_norm'] == genero_norm]
+
+    if user_genre_data.empty:
+        return {"Error": "Género no encontrado o sin datos. Por favor, ingresa un género válido."}
+
+    top_user = user_genre_data["user_id"].iloc[0]
+    user_history = user_genre_data[user_genre_data['user_id'] == top_user][['year_of_release', 'playtime_forever_year']].rename(columns={'year_of_release': 'Year', 'playtime_forever_year': 'Hours Played'})
+    user_history_dict = user_history.to_dict(orient="records")
+
+    # Devolver los resultados
+    return {"Usuario": top_user, "con más horas jugadas para": genero, "Historial acumulado": user_history_dict}
+
+from fastapi import FastAPI
+import pandas as pd
+
+app = FastAPI()
+
+# Función auxiliar para normalizar cadenas de texto
+def normalize_string(s):
+    return s.lower().strip()
+
+@app.get("/MostPlayedYearForGenre/{genre}")
+def MostPlayedYearForGenre(genre: str):
+    """
+    <font color="blue">
+    <h1><u>MostPlayedYearForGenre</u></h1>
+    </font>
+
+    <b>Descubre el Año Estrella para tu Género de Juego Favorito.</b><br>
+    <b>¿Curioso por saber cuál año fue el más jugado para tu género favorito? Esta función te lo revela.</b><br>
 
     <em>Parámetros</em><br>
     ----------
     genre : <code>str</code>
     
-        Género en inglés, por ejemplo: "Action", "Simulation", "Indie", etc.
+        Introduce el género de juego en inglés, como "action", "simulation", "indie", etc.
 
-    <em>Retorno</em><br>
+    <em>Resultado</em><br>
     -----------
     Ejemplo:
     ```python
-        >>> PlayTimeGenre("Action")
+        >>> MostPlayedYearForGenre("action")
     
-    {"Año de lanzamiento con más horas jugadas para Género Action" : 2012}
+    {"Año con más horas jugadas para Género Action": 2014}
     ```
-    INSTRUCCIONES<br>
-                        1. Haga clic en "Try it out".<br>
-                        2. Ingrese el Género en el cuadro de abajo. (Primera letra Mayuscula, ejemplo: Indie)<br>
-                        3. Presiona Excute.<br>
-                        4. Desplácese hacia "Response body" para ver el resultado.
-                        </font>
-
-    """
-    # Filtra el DataFrame por el género especificado
-    genre_data = df_most_played_year[df_most_played_year['genres'] == genre]
-    
-    if genre_data.empty:
-        return f'El género {genre} no se encuentra en el conjunto de datos.'
-    
-    # Obtiene el año directamente y conviértelo a un tipo de dato int
-    max_playtime_year = int(genre_data.iloc[0]['release_year'])
-    
-    # Devuelve el resultado en el formato deseado
-    result = {f"Año de lanzamiento con más horas jugadas para el género {genre}": max_playtime_year}
-    
-    return result
-
-
-
-#Endpoint 2
-@app.get("/most_hours_played_genre/{genre}")
-def UserForGenre(genre):
-    """
-        <font color="blue">
-        <h1><u>UserForGenre</u></h1>
-        </font>
-
-        <b>Usuario con más horas jugadas para Género dado.</b><br>
-        <b>Esta función recibe un género y retorna  el usuario que acumula más horas jugadas para el género dado y una lista de la acumulación de horas jugadas por año.</b><br>
-
-        <em>Parámetros</em><br>
-        ----------
-        genre : <code>str</code>
-        
-            Género en inglés, por ejemplo: "Action", "Simulation", "Indie", etc.
-
-        <em>Retorno</em><br>
-        -----------
-        Ejemplo:
-        ```python
-            >>> UserForGenre("Action")
-        
-        {"Usuario con más horas jugadas para Género Action" : "thiefofrosesinlalaland, "Horas jugadas":
-        [{{Año: 2014, Horas: 7107.58}, {Año: 2015, Horas: 331.12}]}
-        ```
-        INSTRUCCIONES<br>
-                            1. Haga clic en "Try it out".<br>
-                            2. Ingrese el Género en el cuadro de abajo. (Primera letra Mayuscula, ejemplo: Simulation)<br>
-                            3. Presiona Excute.<br>
-                            4. Desplácese hacia "Response body" para ver el resultado.
+    PASOS PARA PROBAR<br>
+                            1. Selecciona "Try it out".<br>
+                            2. Escribe el género en el campo de texto, en minúsculas o mayúsculas, como prefieras (ejemplo: action).<br>
+                            3. Haz clic en "Execute".<br>
+                            4. Consulta el "Response body" para ver el año más jugado.
                             </font>
-
-        """
-    # Filtra el DataFrame por el género especificado
-    genre_data = df_maxuser_genre_cleaned[df_maxuser_genre_cleaned['genres'] == genre]
-    
-    if genre_data.empty:
-        return f'El género {genre} no se encuentra en el conjunto de datos.'
-    
-    # Encuentra el usuario con más horas jugadas para el género
-    max_playtime_user = genre_data['user_id'].values[0]
-    
-    # Crea una lista de acumulación de horas jugadas por año
-    playtime_by_year = []
-    for column in genre_data.columns[3:]:  # Ignora las primeras tres columnas
-        year = int(column)
-        playtime = round(genre_data[column].sum() , 2)  # Convierte minutos a horas y redondea a 2 decimales
-        if playtime > 0:
-            playtime_by_year.append({'Año': year, 'Horas': playtime})
-    
-    # Devuelve el resultado en el formato deseado
-    result = {
-        f"Usuario con más horas jugadas para Género {genre}": max_playtime_user,
-        "Horas jugadas": playtime_by_year
-    }
-
-    return result
-
-#3
-@app.get("/top_3_MOST_recommended_games/{year}")
-def UsersRecommend(year):
     """
-        <font color="blue">
-        <h1><u>UsersRecommend</u></h1>
-        </font>
+    # Reutilizando la preparación de datos de UserForGenre
+    user_items['user_id'] = user_items['user_id'].astype('string')
+    play_time_user = user_items[["item_id", "playtime_forever", "user_id"]]
+    play_time_user['item_id'] = play_time_user['item_id'].astype('float64')
+    combined_genre_user = play_time_user.merge(genre, on="item_id")
+    combined_genre_user = combined_genre_user.astype({'genres': 'string', 'year_of_release': 'string', 'user_id': 'string'})
 
-        <b>Top 3 de juegos MÁS recomendados por usuarios para el año dado. .</b><br>
-        <b>Esta función recibe un año y retorna el top 3 de juegos MÁS recomendados por usuarios para el año dado. .</b><br>
+    # Normalización y búsqueda del año con más horas jugadas
+    genero_norm = normalize_string(genre)
+    combined_genre_user['genres_norm'] = combined_genre_user['genres'].apply(normalize_string)
+    genre_year_data = combined_genre_user[combined_genre_user['genres_norm'] == genero_norm]
 
-        <em>Parámetros</em><br>
-        ----------
-        año : <code>int</code>
-        
-            Año, por ejemplo: 2010, 2012, etc.
+    if genre_year_data.empty:
+        return {"Error": "Género no encontrado o sin datos. Por favor, ingresa un género válido."}
 
-        <em>Retorno</em><br>
-        -----------
-        Ejemplo:
-        ```python
-            >>> UsersRecommend(2012)
-        
-        [{"Puesto 1" : "Team Fortress 2"}, {"Puesto 2" : "Terraria"},{"Puesto 3" : "Garry's Mod"}]
-        
-        ```
-        INSTRUCCIONES<br>
-                            1. Haga clic en "Try it out".<br>
-                            2. Ingrese el Año en el cuadro de abajo. <br>
-                            3. Presiona Excute.<br>
-                            4. Desplácese hacia "Response body" para ver el resultado.
+    most_played_year = genre_year_data.groupby("year_of_release")["playtime_forever"].sum().idxmax()
+
+    # Devolver los resultados
+    return {"Año con más horas jugadas para Género": genre, "Año": most_played_year}
+
+
+@app.get('/UsersRecommend/{year}')
+def UsersRecommend(year: int):
+    """
+    <font color="blue">
+    <h1><u>UsersRecommend</u></h1>
+    </font>
+
+    <b>Los Juegos Más Valorados por los Usuarios para un Año Específico.</b><br>
+    <b>Descubre cuáles fueron los top 3 juegos más recomendados por los usuarios en un año concreto.</b><br>
+
+    <em>Parámetros</em><br>
+    ----------
+    año : <code>int</code>
+    
+        Año de interés, como 2010, 2012, etc.
+
+    <em>Resultado</em><br>
+    -----------
+    Ejemplo:
+    ```python
+        >>> UsersRecommend(2012)
+    
+    [{"Puesto 1" : "Team Fortress 2"}, {"Puesto 2" : "Terraria"}, {"Puesto 3" : "Garry's Mod"}]
+    ```
+    CÓMO UTILIZAR<br>
+                            1. Haz clic en "Try it out".<br>
+                            2. Introduce el Año en el campo de abajo.<br>
+                            3. Pulsa "Execute".<br>
+                            4. Desplázate hasta "Response body" para descubrir los juegos más valorados.
                             </font>
-
-        """
-    # Filtrar el DataFrame por el año dado
-    filtered_df = df_top_positive_games_by_year[df_top_positive_games_by_year['reviews_year'] == year]
-    
-    # Verificar si se encontraron revisiones para el año dado
-    if filtered_df.empty:
-        return "Año ingresado inválido o sin revisiones."
-    
-    top_games_list = [
-        {"Puesto 1": filtered_df.iloc[0]['Rank 1']},
-        {"Puesto 2": filtered_df.iloc[0]['Rank 2']},
-        {"Puesto 3": filtered_df.iloc[0]['Rank 3']}
+    """
+    # Filtra las reseñas para el año dado, recomendaciones positivas o neutrales
+    filtered_reviews = user_reviews[
+        (user_reviews['year'] == year) & 
+        (user_reviews['reviews_recommend'] == True) & 
+        (user_reviews['sentiment_analysis'].isin([1, 2]))  # 1 para positivo, 2 para neutral
     ]
-    return top_games_list
 
-#4
-@app.get("/top_3_LEAST_recommended_games/{year}")
-def UsersNotRecommend(year):
+    # Contar recomendaciones por ID de juego
+    recommend_count = filtered_reviews.groupby('reviews_item_id').size().reset_index(name='recommend_count')
+
+    # Ordenar y obtener los 3 juegos principales
+    top_3_games = recommend_count.sort_values(by='recommend_count', ascending=False).head(3)
+
+    # Fusionar con el conjunto de datos de juegos para obtener nombres
+    top_3_games_with_names = pd.merge(top_3_games, steam_games.drop_duplicates(subset='item_id'), 
+                                      left_on='reviews_item_id', right_on='item_id')
+
+    # Preparar el resultado final
+    top_3_games_list = top_3_games_with_names[['app_name', 'recommend_count']].to_dict(orient='records')
+    top_3_result = [{"Puesto 1": top_3_games_list[0]['app_name']}, 
+                    {"Puesto 2": top_3_games_list[1]['app_name']}, 
+                    {"Puesto 3": top_3_games_list[2]['app_name']}]
+
+    return f"Los 3 juegos más recomendados por usuarios para el año {year} son: {top_3_result}"
+
+
+@app.get('/UsersWorstDeveloper/{year}')
+def UsersWorstDeveloper(year: int):
     """
-        <font color="blue">
-        <h1><u>sersNotRecommend</u></h1>
-        </font>
+    <font color="blue">
+    <h1><u>UsersWorstDeveloper</u></h1>
+    </font>
 
-        <b>Top 3 de juegos MENOS recomendados por usuarios para el año dado. .</b><br>
-        <b>Esta función recibe un año y retorna el top 3 de juegos MENOS recomendados por usuarios para el año dado. .</b><br>
+    <b>Descubre los Desarrolladores de Juegos Menos Favoritos del Año.</b><br>
+    <b>Esta función identifica a los tres desarrolladores de juegos que han recibido más reseñas negativas en un año específico.</b><br>
 
-        <em>Parámetros</em><br>
-        ----------
-        año : <code>int</code>
-        
-            Año, por ejemplo: 2010, 2012, etc.
-
-        <em>Retorno</em><br>
-        -----------
-        Ejemplo:
-        ```python
-            >>> UsersNotRecommend(2015)
-        
-        [{"Puesto 1" : ""Counter-Strike: Global Offensive""}, {"Puesto 2" : "DayZ"},{"Puesto 3" : "Rust"}]
-        
-        ```
-        INSTRUCCIONES<br>
-                            1. Haga clic en "Try it out".<br>
-                            2. Ingrese el Año en el cuadro de abajo. <br>
-                            3. Presiona Excute.<br>
-                            4. Desplácese hacia "Response body" para ver el resultado.
-                            </font>
-
-        """
-    # Filtrar el DataFrame por el año dado
-    filtered_df = df_top_negative_games_by_year[df_top_negative_games_by_year['reviews_year'] == year]
+    <em>Parámetros</em><br>
+    ----------
+    año : <code>int</code>
     
-    # Verificar si se encontraron revisiones para el año dado
-    if filtered_df.empty:
-        return "Año ingresado inválido o sin revisiones."
+        Año de interés, por ejemplo: 2010, 2012, etc.
+
+    <em>Resultado</em><br>
+    -----------
+    Ejemplo:
+    ```python
+        >>> UsersWorstDeveloper(2012)
     
-    top_games_list = [
-        {"Puesto 1": filtered_df.iloc[0]['Rank 1']},
-        {"Puesto 2": filtered_df.iloc[0]['Rank 2']},
-        {"Puesto 3": filtered_df.iloc[0]['Rank 3']}
-    ]
-    return top_games_list
-
-
-#5
-@app.get("/reviews_sentiment_analysis/{year}")
-def sentiment_analysis(year: int):
-    """
-        <font color="blue">
-        <h1><u>sentiment_analysis</u></h1>
-        </font>
-
-        <b>Análisis de sentimiento, para reviews por año.</b><br>
-        <b>Esta función recibe un año y retorna una lista con la cantidad de registros de reseñas de usuarios que se encuentren categorizados con un análisis de sentimiento.</b><br>
-
-        <em>Parámetros</em><br>
-        ----------
-        año : <code>int</code>
-        
-            Año, por ejemplo: 2010, 2012, etc.
-
-        <em>Retorno</em><br>
-        -----------
-        Ejemplo:
-        ```python
-            >>> sentiment_analysis(2015)
-        
-        [{Negative = 928, Neutral = 1908, Positive = 3653}]
-        
-        ```
-        INSTRUCCIONES<br>
-                            1. Haga clic en "Try it out".<br>
-                            2. Ingrese el Año en el cuadro de abajo. <br>
-                            3. Presiona Excute.<br>
-                            4. Desplácese hacia "Response body" para ver el resultado.
+    [{"Puesto 1": "Desarrollador A"}, {"Puesto 2": "Desarrollador B"}, {"Puesto 3": "Desarrollador C"}]
+    ```
+    INSTRUCCIONES DE USO<br>
+                            1. Selecciona "Try it out".<br>
+                            2. Introduce el año en el campo de texto correspondiente.<br>
+                            3. Haz clic en "Execute".<br>
+                            4. Consulta el "Response body" para conocer a los desarrolladores menos favoritos.
                             </font>
-
-        """
-    # Crear un dataframe donde las filas son años y las columnas análisis de sentimiento.
-    df_sentiment_counts = pd.read_csv('./Data_API/df_sentiment_counts.csv')
-
-    # Encontrar los valores de sentimiento para el año pasado como parámetro.
-    negativo = df_sentiment_counts.loc[df_sentiment_counts.release_year == year, "total_negativos"].item()
-    neutral = df_sentiment_counts.loc[df_sentiment_counts.release_year == year, "total_neutrales"].item()
-    positivo = df_sentiment_counts.loc[df_sentiment_counts.release_year == year, "total_positivos"].item()
-
-    return {"Negative" : negativo, "Neutral" : neutral, "Positive" : positivo}
-
-
-#6
-df_item_similarity = pd.read_parquet('./Data_API/df_item_similarity.parquet')
-num_recomendaciones=5
-
-@app.get("/top5_recommended_games_name/{item_name}")
-def game_recommendation(item_name: str):
     """
-        <font color="blue">
-        <h1><u>game_recommendation</u></h1>
-        </font>
+    # Filtrar las reseñas para el año dado y donde la recomendación es False
+    reviews_year = user_reviews[(user_reviews['year'] == year) & (user_reviews['reviews_recommend'] == False)]
 
-        <b>Lista con 5 juegos recomendados similares al ingresado.</b><br>
-        <b>Esta función recibe un nombre de videojuego y retorna una lista con 5 juegos recomendados similares al ingresado.</b><br>
+    # Combinar las reseñas con los datos de los juegos para obtener la información del desarrollador
+    merged_data = reviews_year.merge(steam_games, left_on='reviews_item_id', right_on='item_id')
 
-        <em>Parámetros</em><br>
-        ----------
-        item_name : <code>str</code>
-        
-            Nombre del videojuego, por ejemplo: Renegade Ops, Pro Evolution Soccer 2013, SimCity 4 Deluxe, etc.
+    # Contar el número de reseñas negativas para cada desarrollador para el año dado
+    developer_negative_reviews = merged_data['developer'].value_counts()
 
-        <em>Retorno</em><br>
-        -----------
-        Ejemplo:
-        ```python
-            >>> game_recommendation(2015)
-                
-                [{
-        "Juegos similares a": "Renegade Ops",
-        "Recomendaciones": [
-            {
-            "Recomendación": 1,
-            "Juego": "Xpand Rally Xtreme"
-            },
-            {
-            "Recomendación": 2,
-            "Juego": "Puzzle Agent"
-            },
-            {
-            "Recomendación": 3,
-            "Juego": "Counter-Strike"
-            },
-            {
-            "Recomendación": 4,
-            "Juego": "FTL: Faster Than Light"
-            },
-            {
-            "Recomendación": 5,
-            "Juego": "Sid Meier's Civilization V"
-            }
-            ]
-            }]
-         ```
+    # Obtener los tres principales desarrolladores con más reseñas negativas
+    top_3_developers = developer_negative_reviews.head(3)
 
-        INSTRUCCIONES<br>
-                            1. Haga clic en "Try it out".<br>
-                            2. Ingrese el nombre del videojuego en el cuadro de abajo. (Primera letra Mayuscula, ejemplo: SimCity 4 Deluxe)<br>
-                            3. Presiona Excute.<br>
-                            4. Desplácese hacia "Response body" para ver el resultado.
-                            </font>
+    # Formatear la salida
+    formatted_output = [{"Puesto 1": top_3_developers.index[0]}, 
+                        {"Puesto 2": top_3_developers.index[1]}, 
+                        {"Puesto 3": top_3_developers.index[2]}]
+    
+    # Construyendo el mensaje
+    message = f"Las 3 desarrolladoras con juegos MENOS recomendados por usuarios para el año {year}:"
 
-        """
-    if item_name in df_item_similarity:
-        juego_similaridades = df_item_similarity[item_name]
-        juegos_similares = juego_similaridades.sort_values(ascending=False)
-        juegos_similares = juegos_similares[1:num_recomendaciones + 1]
-        recommendations = [{"Recomendación": i, "Juego": juego} for i, (juego, similitud) in enumerate(juegos_similares.items(), 1)]
-        return JSONResponse(content={"Juegos similares a": item_name, "Recomendaciones": recommendations})
-    else:
-        return JSONResponse(content={"Mensaje": "El juego ingresado no está en la base de datos."})
+    return message, formatted_output
+
+@app.get('/sentiment_analysis/{developer_name}')
+def sentiment_analysis(developer_name: str) -> str:
+    # Normalizar el nombre de la desarrolladora para hacerlo insensible a mayúsculas/minúsculas
+    developer_name_normalized = developer_name.lower()
+
+    # Filtrando juegos por la desarrolladora especificada
+    filtered_games = steam_games[steam_games['developer'].str.lower() == developer_name_normalized]
+
+    # Obteniendo los IDs de los juegos de la desarrolladora
+    game_ids = filtered_games['item_id'].unique()
+
+    # Filtrando las reseñas para los juegos de la desarrolladora
+    reviews = user_reviews[user_reviews['reviews_item_id'].isin(game_ids)]
+
+    # Contando las reseñas por análisis de sentimiento
+    sentiment_counts = reviews['sentiment_analysis'].value_counts().sort_index()
+    sentiment_counts = { "Negative": sentiment_counts.get(0, 0), 
+                         "Neutral": sentiment_counts.get(1, 0), 
+                         "Positive": sentiment_counts.get(2, 0) }
+
+    # Formateando el mensaje de salida
+    return f"El análisis de sentimiento de valor para la desarrolladora {developer_name} es: [Negative = {sentiment_counts['Negative']}, Neutral = {sentiment_counts['Neutral']}, Positive = {sentiment_counts['Positive']}]"
