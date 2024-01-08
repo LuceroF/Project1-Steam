@@ -367,4 +367,4 @@ def  recomendacion_juego(item_id:int):
         return respuesta
     except Exception as e:
         # Manejo genérico de excepciones, puedes especificar errores más específicos si lo prefieres
-        raise HTTPException(status_code=500, detail=str(e), detail="El ID del juego debe ser un número entero.")
+        raise HTTPException(status_code=500, detail="El ID del juego debe ser un número entero.")
