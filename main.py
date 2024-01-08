@@ -11,10 +11,11 @@ from fastapi.responses import HTMLResponse
 
 #DATA GENERAL DE LA API
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="image"), name="static")
 app.title = "Juegos de Steam - Proyecto Individual N1"
 app.description = """
 <div style="font-family: Arial, sans-serif; text-align: center;">
-    <img src=image/Banner-deploy.jpg>
+    <img src="/static/Banner-deploy.jpg" >
     <p style="font-size: 16px; color: #333;">
         Bienvenidos a la aplicación de recomendación de juegos de Steam.
         Aquí podrás explorar y descubrir juegos a través de nuestras
