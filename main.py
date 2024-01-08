@@ -33,7 +33,7 @@ funcion_2 = pd.read_parquet('data/funcion_2.parquet')
 funcion_3 = pd.read_parquet('data/funcion_3.parquet')
 funcion_4 = pd.read_parquet('data/funcion_4.parquet')
 funcion_5 = pd.read_parquet('data/funcion_5.parquet')
-modelo_recomendacion = pd.read_parquet('data\modelo_recomendacion.parquet')
+modelo_recomendacion = pd.read_parquet('data/modelo_recomendacion.parquet')
 
 @app.get('/UserForGenre/{genero}', tags=['Consultas sobre Steam Games'])
 def UserForGenre(genero: str):
