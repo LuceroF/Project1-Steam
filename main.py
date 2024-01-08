@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from sklearn.metrics.pairwise import cosine_similarity
 import unicodedata
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 
 #DATA GENERAL DE LA API
