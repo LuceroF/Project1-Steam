@@ -4,3 +4,4 @@ pandas==2.1.4
 pyarrow==14.0.2
 uvicorn==0.25.0
 scikit-learn
+streamlit
