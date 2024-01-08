@@ -14,7 +14,7 @@ app = FastAPI()
 app.title = "Juegos de Steam - Proyecto Individual N1"
 app.description = """
 <div style="font-family: Arial, sans-serif; text-align: center;">
-    <img src="Banner-deploy.jpg"
+    <img src=image/Banner-deploy.jpg>
     <p style="font-size: 16px; color: #333;">
         Bienvenidos a la aplicación de recomendación de juegos de Steam.
         Aquí podrás explorar y descubrir juegos a través de nuestras
